@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import api from "../api/axios.js";
 import { useDispatch } from "react-redux";
@@ -17,7 +16,6 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  // Handle input changes
   const handleChange = (e) => {
     const { name, value } = e.target;
 
@@ -26,13 +24,9 @@ export default function Login() {
       [name]: value,
     }));
 
-    // Clear previous error when user starts typing
-    if (error) {
-      setError("");
-    }
+    setError("");
   };
 
-  // Handle login
   const handleSubmit = async (e) => {
     e.preventDefault();
 
@@ -45,11 +39,11 @@ export default function Login() {
       setLoading(true);
       setError("");
 
-      const response = await api.post("/api/auth/login", formData);
+      const response = await api.post(
+        "/api/auth/login",
+        formData
+      );
 
-      console.log("Login response:", response.data);
-
-      // Save authentication information in Redux
       dispatch(
         setCredentials({
           token: response.data.token,
@@ -57,120 +51,166 @@ export default function Login() {
         })
       );
 
-      // Redirect after successful login
       navigate("/dashboard");
+
     } catch (err) {
-      console.error(
-        "Login Error:",
-        err.response?.data || err.message
-      );
+      console.error("Login Error:", err.response?.data || err.message);
 
       setError(
         err.response?.data?.message ||
           "Login failed. Please check your credentials."
       );
+
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className=" flex justify-center items-center  px-4">
+    <div className="w-full flex items-center justify-center px-4">
 
-      {/* Login Card */}
-      <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl p-8">
+      <div className="w-full max-w-sm">
 
-        {/* Header */}
-        <div className="text-center mb-8">
-          <div className="flex justify-center mb-4">
-            <div className="h-14 w-14 rounded-2xl bg-indigo-600 flex items-center justify-center text-2xl">
-              🧠
-            </div>
+        {/* Logo */}
+        <div className="text-center mb-6">
+
+          <div className="mx-auto mb-3 w-12 h-12 rounded-xl bg-indigo-600 flex items-center justify-center text-xl">
+            🧠
           </div>
 
-          <h1 className="text-3xl font-bold text-gray-800">
-            Welcome Back
+          <h1 className="text-2xl font-bold text-white">
+            Welcome back
           </h1>
 
-          <p className="text-gray-500 mt-2">
-            Sign in to continue to DevMind
+          <p className="text-sm text-slate-400 mt-1">
+            Sign in to DevMind
           </p>
+
         </div>
 
-        {/* Error */}
-        {error && (
-          <div className="mb-5 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">
-            {error}
-          </div>
-        )}
 
-        {/* Login Form */}
-        <form
-          className="flex flex-col gap-5"
-          onSubmit={handleSubmit}
-        >
+        {/* Card */}
+        <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
 
-          {/* Email */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Email
-            </label>
+          {/* Error */}
+          {error && (
+            <div className="mb-4 px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/20 text-sm text-red-400">
+              {error}
+            </div>
+          )}
 
-            <input
-              type="email"
-              name="email"
-              value={formData.email}
-              onChange={handleChange}
-              placeholder="Enter your email"
-              autoComplete="email"
-              className="w-full border border-gray-300 rounded-lg px-4 py-3 outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
-            />
-          </div>
-
-          {/* Password */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Password
-            </label>
-
-            <input
-              type="password"
-              name="password"
-              value={formData.password}
-              onChange={handleChange}
-              placeholder="Enter your password"
-              autoComplete="current-password"
-              className="w-full border border-gray-300 rounded-lg px-4 py-3 outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
-            />
-          </div>
-
-          {/* Login Button */}
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full bg-indigo-600 text-white py-3 rounded-lg font-medium hover:bg-indigo-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+          <form
+            onSubmit={handleSubmit}
+            className="space-y-4"
           >
-            {loading ? "Signing in..." : "Login"}
-          </button>
-        </form>
 
-        {/* Register */}
-        <div className="mt-6 text-center">
-          <p className="text-sm text-gray-500">
-            Don't have an account?
-          </p>
+            {/* Email */}
+            <div>
+              <label className="block text-sm text-slate-300 mb-1.5">
+                Email
+              </label>
 
-          <button
-            type="button"
-            onClick={() => navigate("/register")}
-            className="mt-2 text-indigo-600 font-medium hover:text-indigo-700 transition"
-          >
-            Create New Account
-          </button>
+              <input
+                type="email"
+                name="email"
+                value={formData.email}
+                onChange={handleChange}
+                placeholder="you@example.com"
+                autoComplete="email"
+                className="
+                  w-full
+                  px-3.5 py-2.5
+                  rounded-lg
+                  bg-slate-950
+                  border border-slate-700
+                  text-white
+                  text-sm
+                  placeholder:text-slate-600
+                  outline-none
+                  focus:border-indigo-500
+                  focus:ring-1
+                  focus:ring-indigo-500
+                "
+              />
+            </div>
+
+
+            {/* Password */}
+            <div>
+              <label className="block text-sm text-slate-300 mb-1.5">
+                Password
+              </label>
+
+              <input
+                type="password"
+                name="password"
+                value={formData.password}
+                onChange={handleChange}
+                placeholder="Enter your password"
+                autoComplete="current-password"
+                className="
+                  w-full
+                  px-3.5 py-2.5
+                  rounded-lg
+                  bg-slate-950
+                  border border-slate-700
+                  text-white
+                  text-sm
+                  placeholder:text-slate-600
+                  outline-none
+                  focus:border-indigo-500
+                  focus:ring-1
+                  focus:ring-indigo-500
+                "
+              />
+            </div>
+
+
+            {/* Login */}
+            <button
+              type="submit"
+              disabled={loading}
+              className="
+                w-full
+                py-2.5
+                rounded-lg
+                bg-indigo-600
+                hover:bg-indigo-500
+                text-white
+                text-sm
+                font-medium
+                transition
+                disabled:opacity-50
+                disabled:cursor-not-allowed
+              "
+            >
+              {loading ? "Signing in..." : "Sign in"}
+            </button>
+
+          </form>
+
+
+          {/* Register */}
+          <div className="mt-5 pt-4 border-t border-slate-800 text-center">
+
+            <span className="text-sm text-slate-500">
+              Don't have an account?
+            </span>
+
+            <button
+              type="button"
+              onClick={() => navigate("/register")}
+              className="ml-1 text-sm text-indigo-400 hover:text-indigo-300"
+            >
+              Create account
+            </button>
+
+          </div>
+
         </div>
 
       </div>
+
     </div>
   );
 }
-

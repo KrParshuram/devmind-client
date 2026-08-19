@@ -11,6 +11,7 @@ import Collection from "./pages/Collections";
 import Sidebar from "./components/Sidebar";
 import AuthLayout from "./components/AuthLayout";
 import Chat from "./pages/Chat";
+import GithubChat from "./pages/GithubChat";
 
 
 // ===============================
@@ -18,42 +19,37 @@ import Chat from "./pages/Chat";
 // ===============================
 
 function Layout({ children }) {
-  const [isOpen, setIsOpen] = useState(false);
+  const [isOpen, setIsOpen] = useState(true);
 
   return (
     <div className="flex h-screen bg-slate-950 overflow-hidden">
 
-      {/* =========================
-          Sidebar
-      ========================== */}
+      {/* Sidebar */}
       <Sidebar
         isOpen={isOpen}
         setIsOpen={setIsOpen}
       />
 
-      {/* =========================
-          Main Application Area
-      ========================== */}
+      {/* Main */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
 
-        {/* Mobile Header */}
-        <div className="md:hidden flex items-center justify-between px-4 py-3 bg-slate-900 border-b border-slate-800">
+        {/* Header */}
+        <header className="flex items-center px-4 py-3 bg-slate-900 border-b border-slate-800">
+
+          <button
+            type="button"
+            onClick={() => setIsOpen(prev => !prev)}
+            className="text-white text-xl mr-4 hover:text-indigo-400"
+          >
+            ☰
+          </button>
 
           <h1 className="text-white font-bold text-lg">
             DevMind
           </h1>
 
-          <button
-            onClick={() => setIsOpen(true)}
-            className="text-white text-2xl"
-          >
-            ☰
-          </button>
+        </header>
 
-        </div>
-
-
-        {/* Page Content */}
         <main className="flex-1 overflow-y-auto bg-slate-950">
           {children}
         </main>
@@ -63,7 +59,6 @@ function Layout({ children }) {
     </div>
   );
 }
-
 
 // ===============================
 // Protected Route
@@ -178,6 +173,16 @@ export default function App() {
           }
         />
 
+        <Route
+          path="/github/:repoId/chat/:conversationId"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <GithubChat />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
 
         {/* =========================
             Existing Conversation

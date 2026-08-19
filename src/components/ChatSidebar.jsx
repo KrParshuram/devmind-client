@@ -34,7 +34,7 @@ export default function ChatSidebar({
 
   // Load conversations when sidebar mounts
   useEffect(() => {
-    fetchConversation();
+    fetchConversations();
   }, []);
 
   // Filter conversations

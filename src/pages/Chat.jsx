@@ -1,4 +1,3 @@
-
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import api from "../api/axios.js";
@@ -8,22 +7,32 @@ export default function Chat() {
   const { conversationId: urlConversationId } = useParams();
   const navigate = useNavigate();
 
+  // =========================================
+  // State
+  // =========================================
+
   const [conversationId, setConversationId] = useState(
     urlConversationId || null
   );
+
+  const [conversation, setConversation] = useState(null);
 
   const [messages, setMessages] = useState([]);
   const [question, setQuestion] = useState("");
 
   const [loading, setLoading] = useState(false);
   const [loadingMessages, setLoadingMessages] = useState(false);
+
   const [showNewConversation, setShowNewConversation] = useState(false);
+
+  const [repoName, setRepoName] = useState("");
+  const [collectionName, setCollectionName] = useState("");
 
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
 
   // =========================================
-  // Sync conversation ID with URL
+  // Sync URL conversation ID
   // =========================================
 
   useEffect(() => {
@@ -31,48 +40,95 @@ export default function Chat() {
   }, [urlConversationId]);
 
   // =========================================
-  // Load existing conversation messages
+  // Load conversation
   // =========================================
 
   useEffect(() => {
     if (!urlConversationId) {
+      setConversation(null);
       setMessages([]);
-      inputRef.current?.focus();
+
+      setTimeout(() => {
+        inputRef.current?.focus();
+      }, 100);
+
       return;
     }
 
-    fetchMessages(urlConversationId);
+    loadConversation(urlConversationId);
   }, [urlConversationId]);
 
-  const fetchMessages = async (id) => {
+  // =========================================
+  // Load conversation + messages
+  // =========================================
+
+  const loadConversation = async (id) => {
     try {
       setLoadingMessages(true);
 
-      const response = await api.get(
+      // -------------------------------------
+      // Get all conversations
+      // -------------------------------------
+
+      const conversationResponse = await api.get(
+        "/api/user/conversations"
+      );
+
+      const conversations =
+        conversationResponse.data.conversations || [];
+
+      const currentConversation = conversations.find(
+        (item) => String(item._id) === String(id)
+      );
+
+      if (!currentConversation) {
+        console.error("Conversation not found");
+
+        setConversation(null);
+        setMessages([]);
+
+        return;
+      }
+
+      setConversation(currentConversation);
+
+      // -------------------------------------
+      // Get messages
+      // -------------------------------------
+
+      const messageResponse = await api.get(
         `/api/user/conversations/${id}/messages`
       );
 
-      const serverMessages = response.data.messages || [];
+      const serverMessages =
+        messageResponse.data.messages || [];
 
-      // Convert MongoDB messages into frontend format
-      const formattedMessages = serverMessages.map((message) => ({
-        id: message._id,
-        role: message.role,
-        content: message.content,
-        status: message.status || "completed",
-        sources: message.sources || [],
-      }));
+      const formattedMessages = serverMessages.map(
+        (message) => ({
+          id: message._id,
+          role: message.role,
+          content: message.content,
+          status: message.status || "completed",
+          sources: message.sources || [],
+        })
+      );
 
       setMessages(formattedMessages);
 
+      // -------------------------------------
+      // Get display information
+      // -------------------------------------
+
+      await loadConversationSource(currentConversation);
+
     } catch (error) {
       console.error(
-        "Error loading messages:",
+        "Error loading conversation:",
         error.response?.data || error.message
       );
 
+      setConversation(null);
       setMessages([]);
-
     } finally {
       setLoadingMessages(false);
 
@@ -80,6 +136,114 @@ export default function Chat() {
         inputRef.current?.focus();
       }, 100);
     }
+  };
+
+  // =========================================
+  // Load repository / collection name
+  // =========================================
+
+  const loadConversationSource = async (currentConversation) => {
+    const type =
+      currentConversation?.knowledgeScope?.type;
+
+    // -------------------------------------
+    // Repository
+    // -------------------------------------
+
+    if (type === "repository") {
+      setCollectionName("");
+
+      const repoId = currentConversation.repoId;
+
+      if (!repoId) {
+        setRepoName("Repository");
+        return;
+      }
+
+      try {
+        const response = await api.get(
+          "/api/github/repos"
+        );
+
+        const repos = response.data.Repos || [];
+
+        const repo = repos.find(
+          (item) =>
+            String(item._id) === String(repoId)
+        );
+
+        if (repo) {
+          setRepoName(
+            `${repo.owner}/${repo.name}`
+          );
+        } else {
+          setRepoName("Repository");
+        }
+      } catch (error) {
+        console.error(
+          "Failed to load repository:",
+          error
+        );
+
+        setRepoName("Repository");
+      }
+
+      return;
+    }
+
+    // -------------------------------------
+    // Collection
+    // -------------------------------------
+
+    if (type === "collection") {
+      setRepoName("");
+
+      const collectionId =
+        currentConversation.knowledgeScope
+          ?.collectionId;
+
+      if (!collectionId) {
+        setCollectionName("Collection");
+        return;
+      }
+
+      try {
+        const response = await api.get(
+          "/api/collections"
+        );
+
+        const collections =
+          response.data.collections || [];
+
+        const collection = collections.find(
+          (item) =>
+            String(item._id) ===
+            String(collectionId)
+        );
+
+        setCollectionName(
+          collection?.name ||
+            collection?.title ||
+            "Collection"
+        );
+      } catch (error) {
+        console.error(
+          "Failed to load collection:",
+          error
+        );
+
+        setCollectionName("Collection");
+      }
+
+      return;
+    }
+
+    // -------------------------------------
+    // Other conversations
+    // -------------------------------------
+
+    setRepoName("");
+    setCollectionName("");
   };
 
   // =========================================
@@ -93,52 +257,29 @@ export default function Chat() {
   }, [messages]);
 
   // =========================================
-  // Create conversation
+  // Conversation type
   // =========================================
 
-  const createConversation = async () => {
-    try {
-      const response = await api.post(
-        "/api/user/conversation",
-        {
-          knowledgeScope: {
-            type: "all",
-            collectionId: null,
-          },
-        }
-      );
+  const conversationType =
+    conversation?.knowledgeScope?.type || "all";
 
-      const conversation = response.data.conversation;
+  const isRepositoryChat =
+    conversationType === "repository";
 
-      if (!conversation?._id) {
-        throw new Error("Conversation ID was not returned");
-      }
-
-      setConversationId(conversation._id);
-
-      // Change URL to the newly created conversation
-      navigate(`/chat/${conversation._id}`, {
-        replace: true,
-      });
-
-      return conversation._id;
-
-    } catch (error) {
-      console.error(
-        "Error creating conversation:",
-        error.response?.data || error.message
-      );
-
-      throw error;
-    }
-  };
+  const isCollectionChat =
+    conversationType === "collection";
 
   // =========================================
   // Send message
   // =========================================
 
   const handleSubmit = async () => {
-    if (!question.trim() || loading || loadingMessages) {
+    if (
+      !question.trim() ||
+      loading ||
+      loadingMessages ||
+      !conversationId
+    ) {
       return;
     }
 
@@ -147,99 +288,127 @@ export default function Chat() {
     setQuestion("");
     setLoading(true);
 
+    // -------------------------------------
+    // Temporary user message
+    // -------------------------------------
+
+    const userMessageId = crypto.randomUUID();
+
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: userMessageId,
+        role: "user",
+        content: currentQuestion,
+        status: "completed",
+        sources: [],
+      },
+    ]);
+
+    // -------------------------------------
+    // Temporary assistant message
+    // -------------------------------------
+
+    const assistantId = crypto.randomUUID();
+
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: assistantId,
+        role: "assistant",
+        content: "",
+        status: "streaming",
+        sources: [],
+      },
+    ]);
+
     try {
-      // =====================================
-      // 1. Get/create conversation
-      // =====================================
+      const token =
+        localStorage.getItem("token") ||
+        localStorage.getItem("authToken");
 
-      let currentConversationId = conversationId;
+      // ===================================
+      // Decide endpoint
+      // ===================================
 
-      if (!currentConversationId) {
-        currentConversationId = await createConversation();
+      let endpoint;
+
+      if (isRepositoryChat) {
+        const repoId = conversation?.repoId;
+
+        if (!repoId) {
+          throw new Error(
+            "Repository ID is missing from conversation"
+          );
+        }
+
+        endpoint =
+          `http://localhost:3000/api/github/repos/${repoId}/chat`;
+      } else {
+        endpoint =
+          `http://localhost:3000/api/user/conversations/${conversationId}/messages`;
       }
 
-      // =====================================
-      // 2. Add user message immediately
-      // =====================================
+      // ===================================
+      // SSE request
+      // ===================================
 
-      const userMessageId = crypto.randomUUID();
+      const response = await fetch(endpoint, {
+        method: "POST",
 
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: userMessageId,
-          role: "user",
-          content: currentQuestion,
-          status: "completed",
-          sources: [],
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
         },
-      ]);
 
-      // =====================================
-      // 3. Add empty assistant message
-      // =====================================
+        body: JSON.stringify({
+          question: currentQuestion,
 
-      const assistantId = crypto.randomUUID();
-
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: assistantId,
-          role: "assistant",
-          content: "",
-          status: "streaming",
-          sources: [],
-        },
-      ]);
-
-      // =====================================
-      // 4. Get authentication token
-      // =====================================
-
-      const token = localStorage.getItem("authToken");
-
-      // =====================================
-      // 5. Start streaming request
-      // =====================================
-
-      const response = await fetch(
-        `https://devmind-backend-9tu4.onrender.com/api/user/conversations/${currentConversationId}/messages`,
-        {
-          method: "POST",
-
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-
-          body: JSON.stringify({
-            question: currentQuestion,
-          }),
-        }
-      );
+          // Repository endpoint needs this.
+          // Normal endpoint can simply ignore it.
+          conversationId,
+        }),
+      });
 
       if (!response.ok) {
-        throw new Error(
-          `Request failed with status ${response.status}`
-        );
+        let message =
+          `Request failed with status ${response.status}`;
+
+        try {
+          const errorData =
+            await response.json();
+
+          message =
+            errorData.message ||
+            errorData.error ||
+            message;
+        } catch {
+          // Ignore JSON parsing error
+        }
+
+        throw new Error(message);
       }
 
       if (!response.body) {
-        throw new Error("Streaming is not supported");
+        throw new Error(
+          "Streaming is not supported"
+        );
       }
 
-      // =====================================
-      // 6. Read SSE stream
-      // =====================================
+      // ===================================
+      // Read SSE
+      // ===================================
 
-      const reader = response.body.getReader();
+      const reader =
+        response.body.getReader();
 
       const decoder = new TextDecoder();
 
       let buffer = "";
 
       while (true) {
-        const { value, done } = await reader.read();
+        const { value, done } =
+          await reader.read();
 
         if (done) {
           break;
@@ -249,85 +418,136 @@ export default function Chat() {
           stream: true,
         });
 
-        // SSE events are separated by blank lines
-        const events = buffer.split("\n\n");
+        const events =
+          buffer.split("\n\n");
 
-        // Keep incomplete event
-        buffer = events.pop() || "";
+        buffer =
+          events.pop() || "";
 
         for (const event of events) {
           if (!event.startsWith("data:")) {
             continue;
           }
 
-          const data = event.replace(/^data:\s*/, "");
+          const data =
+            event.replace(
+              /^data:\s*/,
+              ""
+            );
 
           try {
-            const parsed = JSON.parse(data);
+            const parsed =
+              JSON.parse(data);
 
             // =================================
-            // TOKEN
+            // Repository conversation created
             // =================================
 
-            if (parsed.type === "token") {
+            if (
+              parsed.type ===
+              "conversation"
+            ) {
+              if (
+                parsed.conversationId &&
+                !conversationId
+              ) {
+                navigate(
+                  `/chat/${parsed.conversationId}`,
+                  { replace: true }
+                );
+              }
+            }
+
+            // =================================
+            // Token
+            // =================================
+
+            if (
+              parsed.type === "token"
+            ) {
               setMessages((prev) =>
                 prev.map((message) => {
-                  if (message.id !== assistantId) {
+                  if (
+                    message.id !==
+                    assistantId
+                  ) {
                     return message;
                   }
 
                   return {
                     ...message,
+
                     content:
-                      message.content + parsed.content,
+                      message.content +
+                      parsed.content,
+
+                    status: "streaming",
                   };
                 })
               );
             }
 
             // =================================
-            // DONE
+            // Done
             // =================================
 
-            if (parsed.type === "done") {
+            if (
+              parsed.type === "done"
+            ) {
               setMessages((prev) =>
                 prev.map((message) => {
-                  if (message.id !== assistantId) {
+                  if (
+                    message.id !==
+                    assistantId
+                  ) {
                     return message;
                   }
 
                   return {
                     ...message,
-                    status: "completed",
-                    sources: parsed.sources || [],
-                    serverMessageId: parsed.messageId,
+
+                    status:
+                      "completed",
+
+                    sources:
+                      parsed.sources ||
+                      [],
+
+                    serverMessageId:
+                      parsed.messageId,
                   };
                 })
               );
             }
 
             // =================================
-            // ERROR
+            // Error
             // =================================
 
-            if (parsed.type === "error") {
+            if (
+              parsed.type === "error"
+            ) {
               setMessages((prev) =>
                 prev.map((message) => {
-                  if (message.id !== assistantId) {
+                  if (
+                    message.id !==
+                    assistantId
+                  ) {
                     return message;
                   }
 
                   return {
                     ...message,
+
                     status: "failed",
+
                     content:
                       parsed.message ||
-                      "Sorry, something went wrong.",
+                      "Failed to generate response.",
                   };
                 })
               );
             }
-
           } catch (error) {
             console.error(
               "Invalid SSE event:",
@@ -336,32 +556,31 @@ export default function Chat() {
           }
         }
       }
-
     } catch (error) {
       console.error(
-        "Streaming error:",
+        "Chat streaming error:",
         error
       );
 
-      // Mark assistant message as failed
       setMessages((prev) =>
         prev.map((message) => {
           if (
-            message.role !== "assistant" ||
-            message.status !== "streaming"
+            message.id !== assistantId
           ) {
             return message;
           }
 
           return {
             ...message,
+
             status: "failed",
+
             content:
+              error.message ||
               "Sorry, I couldn't generate a response.",
           };
         })
       );
-
     } finally {
       setLoading(false);
 
@@ -381,30 +600,66 @@ export default function Chat() {
       !event.shiftKey
     ) {
       event.preventDefault();
-
       handleSubmit();
     }
   };
 
   // =========================================
-  // New Chat
+  // New chat
   // =========================================
 
   const handleNewChat = () => {
-    if (loading) {
-      return;
-    }
+    if (loading) return;
 
     setMessages([]);
-    setQuestion("");
+    setConversation(null);
     setConversationId(null);
+    setQuestion("");
 
     navigate("/chat");
-    
+
     setTimeout(() => {
       inputRef.current?.focus();
     }, 100);
   };
+
+  // =========================================
+  // Header information
+  // =========================================
+
+  const getChatInfo = () => {
+    if (isRepositoryChat) {
+      return {
+        icon: "📦",
+        type: "Repository Chat",
+        name: repoName || "Repository",
+      };
+    }
+
+    if (isCollectionChat) {
+      return {
+        icon: "📁",
+        type: "RAG Chat",
+        name: collectionName || "Collection",
+      };
+    }
+
+    if (conversationType === "none") {
+      return {
+        icon: "💬",
+        type: "General Chat",
+        name: "No Resources",
+      };
+    }
+
+    return {
+      icon: "🧠",
+      type: "RAG Chat",
+      name: "All Resources",
+    };
+  };
+
+  const chatInfo = getChatInfo();
 
   // =========================================
   // Render
@@ -419,18 +674,32 @@ export default function Chat() {
 
       <div className="h-16 flex-shrink-0 border-b border-white/10 flex items-center justify-between px-6">
 
-        <div>
-          <h1 className="font-semibold text-lg">
-            DevMind
-          </h1>
+        <div className="flex items-center gap-3">
 
-          <span className="text-xs text-slate-500">
-            AI Knowledge Assistant
-          </span>
+          <div className="h-9 w-9 rounded-lg bg-slate-800 flex items-center justify-center">
+            {chatInfo.icon}
+          </div>
+
+          <div>
+            <div className="flex items-center gap-2">
+
+              <h1 className="font-semibold text-sm">
+                {chatInfo.type}
+              </h1>
+
+            </div>
+
+            <p className="text-xs text-slate-400 truncate max-w-[400px]">
+              {chatInfo.name}
+            </p>
+          </div>
+
         </div>
 
         <button
-          onClick={() => setShowNewConversation(true)}
+          onClick={() =>
+            setShowNewConversation(true)
+          }
           disabled={loading}
           className="rounded-lg border border-slate-700 px-4 py-2 text-sm text-slate-300 hover:bg-slate-800 hover:text-white disabled:opacity-40"
         >
@@ -438,7 +707,6 @@ export default function Chat() {
         </button>
 
       </div>
-
 
       {/* =====================================
           Messages
@@ -468,56 +736,27 @@ export default function Chat() {
 
             <div className="flex flex-col items-center justify-center min-h-[60vh] text-center">
 
-              <div className="text-5xl mb-6">
-                🧠
+              <div className="text-5xl mb-5">
+                {chatInfo.icon}
               </div>
 
-              <h2 className="text-3xl font-bold">
-                Ask DevMind
+              <h2 className="text-2xl font-bold">
+                {chatInfo.type}
               </h2>
 
-              <p className="text-slate-400 mt-3 max-w-lg">
-                Ask questions about your saved resources,
-                documents, URLs, notes and code.
+              <p className="text-indigo-400 mt-2 font-medium">
+                {chatInfo.name}
               </p>
 
-              <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-3 w-full max-w-xl">
-
-                <button
-                  onClick={() =>
-                    setQuestion(
-                      "What information do I have saved in my knowledge base?"
-                    )
-                  }
-                  className="text-left p-4 rounded-xl border border-slate-800 bg-slate-900 hover:bg-slate-800 transition"
-                >
-                  <p className="text-sm font-medium">
-                    Explore my knowledge
-                  </p>
-
-                  <p className="text-xs text-slate-500 mt-1">
-                    Search through your saved resources.
-                  </p>
-                </button>
-
-                <button
-                  onClick={() =>
-                    setQuestion(
-                      "Summarize the most important information in my resources."
-                    )
-                  }
-                  className="text-left p-4 rounded-xl border border-slate-800 bg-slate-900 hover:bg-slate-800 transition"
-                >
-                  <p className="text-sm font-medium">
-                    Summarize my resources
-                  </p>
-
-                  <p className="text-xs text-slate-500 mt-1">
-                    Get a summary of your knowledge base.
-                  </p>
-                </button>
-
-              </div>
+              <p className="text-slate-500 mt-3 max-w-lg">
+                {isRepositoryChat
+                  ? "Ask questions about the code and architecture of this repository."
+                  : isCollectionChat
+                  ? "Ask questions about the resources in this collection."
+                  : conversationType === "none"
+                  ? "Have a normal conversation with DevMind."
+                  : "Ask questions about your saved knowledge."}
+              </p>
 
             </div>
 
@@ -558,8 +797,7 @@ export default function Chat() {
                         : "DevMind"}
                     </div>
 
-
-                    {/* Message content */}
+                    {/* Message */}
 
                     <div
                       className={
@@ -571,7 +809,8 @@ export default function Chat() {
 
                       {message.content}
 
-                      {message.status === "streaming" && (
+                      {message.status ===
+                        "streaming" && (
                         <span className="inline-block ml-1 animate-pulse">
                           ▌
                         </span>
@@ -579,12 +818,14 @@ export default function Chat() {
 
                     </div>
 
-
                     {/* Sources */}
 
-                    {message.role === "assistant" &&
-                      message.status === "completed" &&
-                      message.sources?.length > 0 && (
+                    {message.role ===
+                      "assistant" &&
+                      message.status ===
+                        "completed" &&
+                      message.sources?.length >
+                        0 && (
 
                         <div className="mt-4">
 
@@ -595,7 +836,10 @@ export default function Chat() {
                           <div className="flex flex-wrap gap-2">
 
                             {message.sources.map(
-                              (source, index) => (
+                              (
+                                source,
+                                index
+                              ) => (
 
                                 <div
                                   key={
@@ -624,7 +868,9 @@ export default function Chat() {
 
               ))}
 
-              <div ref={messagesEndRef} />
+              <div
+                ref={messagesEndRef}
+              />
 
             </div>
 
@@ -633,7 +879,6 @@ export default function Chat() {
         </div>
 
       </div>
-
 
       {/* =====================================
           Input
@@ -649,12 +894,22 @@ export default function Chat() {
               ref={inputRef}
               value={question}
               onChange={(event) =>
-                setQuestion(event.target.value)
+                setQuestion(
+                  event.target.value
+                )
               }
               onKeyDown={handleKeyDown}
-              placeholder="Ask DevMind..."
+              placeholder={
+                isRepositoryChat
+                  ? "Ask about this repository..."
+                  : "Ask DevMind..."
+              }
               rows={1}
-              disabled={loading}
+              disabled={
+                loading ||
+                loadingMessages ||
+                !conversationId
+              }
               className="flex-1 resize-none rounded-2xl bg-slate-900 border border-slate-700 px-5 py-4 outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50"
             />
 
@@ -663,11 +918,14 @@ export default function Chat() {
               disabled={
                 loading ||
                 loadingMessages ||
-                !question.trim()
+                !question.trim() ||
+                !conversationId
               }
               className="rounded-xl bg-indigo-600 px-5 py-4 font-medium hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed transition"
             >
-              {loading ? "..." : "Send"}
+              {loading
+                ? "..."
+                : "Send"}
             </button>
 
           </div>
@@ -679,16 +937,19 @@ export default function Chat() {
         </div>
 
       </div>
+
+      {/* =====================================
+          New Conversation Modal
+      ====================================== */}
+
       {showNewConversation && (
-  <NewConversationModal
-    onClose={() => {
-      setShowNewConversation(false);
-      fetchConversation();
-    }}
-  />
-)}
+        <NewConversationModal
+          onClose={() => {
+            setShowNewConversation(false);
+          }}
+        />
+      )}
 
     </div>
   );
 }
-

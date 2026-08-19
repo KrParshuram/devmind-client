@@ -3,292 +3,505 @@ import { useNavigate } from "react-router-dom";
 import api from "../api/axios.js";
 
 export default function NewConversationModal({ onClose }) {
-const navigate = useNavigate();
+  const navigate = useNavigate();
 
-const [scopeType, setScopeType] = useState("all");
-const [collectionId, setCollectionId] = useState("");
-const [collections, setCollections] = useState([]);
+  // -----------------------------------------
+  // Conversation source
+  // -----------------------------------------
 
-const [loadingCollections, setLoadingCollections] = useState(false);
-const [creating, setCreating] = useState(false);
+  const [sourceType, setSourceType] = useState("resources");
+  // "resources" | "repository"
 
-// -----------------------------------------
-// Fetch collections
-// -----------------------------------------
+  // -----------------------------------------
+  // Resource conversation
+  // -----------------------------------------
 
-useEffect(() => {
-const fetchCollections = async () => {
-try {
-setLoadingCollections(true);
+  const [scopeType, setScopeType] = useState("all");
+  const [collectionId, setCollectionId] = useState("");
+  const [collections, setCollections] = useState([]);
 
-    const response = await api.get("/api/collections");
+  // -----------------------------------------
+  // Repository conversation
+  // -----------------------------------------
 
-    setCollections(response.data.collections || []);
-  } catch (error) {
-    console.error(
-      "Failed to load collections:",
-      error.response?.data || error.message
-    );
-  } finally {
-    setLoadingCollections(false);
+  const [repos, setRepos] = useState([]);
+  const [repoId, setRepoId] = useState("");
+
+  // -----------------------------------------
+  // Loading
+  // -----------------------------------------
+
+  const [loadingCollections, setLoadingCollections] = useState(false);
+  const [loadingRepos, setLoadingRepos] = useState(false);
+  const [creating, setCreating] = useState(false);
+
+  // -----------------------------------------
+  // Fetch collections + repos
+  // -----------------------------------------
+
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        setLoadingCollections(true);
+        setLoadingRepos(true);
+
+        const [collectionsResponse, reposResponse] =
+          await Promise.all([
+            api.get("/api/collections"),
+            api.get("/api/github/repos"),
+          ]);
+
+        setCollections(
+          collectionsResponse.data.collections || []
+        );
+
+        setRepos(
+          reposResponse.data.Repos || []
+        );
+
+      } catch (error) {
+        console.error(
+          "Failed to load conversation options:",
+          error.response?.data || error.message
+        );
+      } finally {
+        setLoadingCollections(false);
+        setLoadingRepos(false);
+      }
+    };
+
+    loadData();
+  }, []);
+
+  // -----------------------------------------
+  // Change source
+  // -----------------------------------------
+
+const handleSourceChange = (type) => {
+  setSourceType(type);
+
+  if (type === "resources") {
+    setRepoId("");
+  }
+
+  if (type === "repository") {
+    setCollectionId("");
+    setScopeType("all");
   }
 };
 
-fetchCollections();
-
-
-}, []);
-
-// -----------------------------------------
-// Create conversation
-// -----------------------------------------
+  // -----------------------------------------
+  // Create conversation
+  // -----------------------------------------
 
 const handleCreateConversation = async () => {
-if (creating) return;
+  if (creating) return;
 
+  // -----------------------------------------
+  // Repository conversation
+  // -----------------------------------------
 
-if (scopeType === "collection" && !collectionId) {
-  return;
-}
-
-try {
-  setCreating(true);
-
-  const knowledgeScope = {
-    type: scopeType,
-    collectionId:
-      scopeType === "collection"
-        ? collectionId
-        : null,
-  };
-
-  const response = await api.post(
-    "/api/user/conversation",
-    {
-      knowledgeScope,
+  if (sourceType === "repository") {
+    if (!repoId) {
+      return;
     }
-  );
 
-  const conversation = response.data.conversation;
+    try {
+      setCreating(true);
 
-  // Close modal
-  onClose();
+      const response = await api.post(
+        "/api/user/conversations",
+        {
+          repoId,
 
-  // Open newly created conversation
-  navigate(`/chat/${conversation._id}`);
+          knowledgeScope: {
+            type: "repository",
+            collectionId: null,
+          },
+        }
+      );
 
-} catch (error) {
-  console.error(
-    "Failed to create conversation:",
-    error.response?.data || error.message
-  );
-} finally {
-  setCreating(false);
-}
+      const conversation =
+        response.data.conversation;
 
+      onClose();
 
+      // Open the same Chat.jsx
+      navigate(`/chat/${conversation._id}`);
+
+    } catch (error) {
+      console.error(
+        "Failed to create repository conversation:",
+        error.response?.data || error.message
+      );
+    } finally {
+      setCreating(false);
+    }
+
+    return;
+  }
+
+  // -----------------------------------------
+  // Resource conversation
+  // -----------------------------------------
+
+  if (scopeType === "collection" && !collectionId) {
+    return;
+  }
+
+  try {
+    setCreating(true);
+
+    const knowledgeScope = {
+      type: scopeType,
+
+      collectionId:
+        scopeType === "collection"
+          ? collectionId
+          : null,
+    };
+
+    const response = await api.post(
+      "/api/user/conversations",
+      {
+        repoId: null,
+        knowledgeScope,
+      }
+    );
+
+    const conversation =
+      response.data.conversation;
+
+    onClose();
+
+    // Open the same Chat.jsx
+    navigate(`/chat/${conversation._id}`);
+
+  } catch (error) {
+    console.error(
+      "Failed to create conversation:",
+      error.response?.data || error.message
+    );
+  } finally {
+    setCreating(false);
+  }
 };
 
-// -----------------------------------------
-// UI
-// -----------------------------------------
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm px-4">
 
-return ( <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm px-4">
+      <div className="w-full max-w-md rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl">
 
-  <div className="w-full max-w-md rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl">
+        {/* ================================= */}
+        {/* Header */}
+        {/* ================================= */}
 
-    {/* Header */}
-    <div className="flex items-center justify-between px-6 py-5 border-b border-slate-800">
-
-      <div>
-        <h2 className="text-lg font-semibold text-white">
-          New Conversation
-        </h2>
-
-        <p className="text-sm text-slate-400 mt-1">
-          Choose what DevMind should search.
-        </p>
-      </div>
-
-      <button
-        onClick={onClose}
-        disabled={creating}
-        className="text-slate-500 hover:text-white text-xl"
-      >
-        ✕
-      </button>
-
-    </div>
-
-    {/* Body */}
-    <div className="p-6 space-y-4">
-
-      <p className="text-sm font-medium text-slate-300">
-        Knowledge source
-      </p>
-
-      {/* All Resources */}
-      <button
-        type="button"
-        onClick={() => {
-          setScopeType("all");
-          setCollectionId("");
-        }}
-        className={`w-full text-left p-4 rounded-xl border transition ${
-          scopeType === "all"
-            ? "border-indigo-500 bg-indigo-500/10"
-            : "border-slate-700 bg-slate-950 hover:border-slate-600"
-        }`}
-      >
-        <div className="flex items-start gap-3">
-
-          <span className="text-xl">
-            🌐
-          </span>
+        <div className="flex items-center justify-between px-6 py-5 border-b border-slate-800">
 
           <div>
-            <p className="text-sm font-medium text-white">
-              All Resources
-            </p>
+            <h2 className="text-lg font-semibold text-white">
+              New Conversation
+            </h2>
 
-            <p className="text-xs text-slate-400 mt-1">
-              Search across everything saved in your knowledge base.
+            <p className="text-sm text-slate-400 mt-1">
+              Choose what you want to chat with.
             </p>
           </div>
 
-        </div>
-      </button>
-
-      {/* Collection */}
-      <button
-        type="button"
-        onClick={() => setScopeType("collection")}
-        className={`w-full text-left p-4 rounded-xl border transition ${
-          scopeType === "collection"
-            ? "border-indigo-500 bg-indigo-500/10"
-            : "border-slate-700 bg-slate-950 hover:border-slate-600"
-        }`}
-      >
-        <div className="flex items-start gap-3">
-
-          <span className="text-xl">
-            📁
-          </span>
-
-          <div>
-            <p className="text-sm font-medium text-white">
-              Specific Collection
-            </p>
-
-            <p className="text-xs text-slate-400 mt-1">
-              Search resources from one collection only.
-            </p>
-          </div>
-
-        </div>
-      </button>
-
-      {/* Collection selector */}
-      {scopeType === "collection" && (
-        <div className="pl-2">
-
-          <label className="block text-xs font-medium text-slate-400 mb-2">
-            Select collection
-          </label>
-
-          <select
-            value={collectionId}
-            onChange={(e) => setCollectionId(e.target.value)}
-            disabled={loadingCollections}
-            className="w-full rounded-xl bg-slate-950 border border-slate-700 px-4 py-3 text-sm text-white outline-none focus:ring-2 focus:ring-indigo-500"
+          <button
+            onClick={onClose}
+            disabled={creating}
+            className="text-slate-500 hover:text-white text-xl"
           >
-            <option value="">
-              {loadingCollections
-                ? "Loading collections..."
-                : "Select a collection"}
-            </option>
+            ✕
+          </button>
 
-            {collections.map((collection) => (
-              <option
-                key={collection._id}
-                value={collection._id}
+        </div>
+
+        {/* ================================= */}
+        {/* Body */}
+        {/* ================================= */}
+
+        <div className="p-6 space-y-4">
+
+          {/* ================================= */}
+          {/* 1. Resources */}
+          {/* ================================= */}
+
+          <button
+            type="button"
+            onClick={() =>
+              handleSourceChange("resources")
+            }
+            className={`w-full text-left p-4 rounded-xl border transition ${
+              sourceType === "resources"
+                ? "border-indigo-500 bg-indigo-500/10"
+                : "border-slate-700 bg-slate-950 hover:border-slate-600"
+            }`}
+          >
+
+            <div className="flex items-start gap-3">
+
+              <span className="text-xl">
+                🧠
+              </span>
+
+              <div>
+                <p className="text-sm font-medium text-white">
+                  Knowledge Base
+                </p>
+
+                <p className="text-xs text-slate-400 mt-1">
+                  Chat with your saved resources.
+                </p>
+              </div>
+
+            </div>
+
+          </button>
+
+          {/* ================================= */}
+          {/* Resource Options */}
+          {/* ================================= */}
+
+          {sourceType === "resources" && (
+
+            <div className="space-y-3 pl-2">
+
+              {/* All */}
+
+              <button
+                type="button"
+                onClick={() => {
+                  setScopeType("all");
+                  setCollectionId("");
+                }}
+                className={`w-full text-left p-3 rounded-xl border transition ${
+                  scopeType === "all"
+                    ? "border-indigo-500 bg-indigo-500/10"
+                    : "border-slate-700 bg-slate-950 hover:border-slate-600"
+                }`}
               >
-                {collection.name || collection.title}
-              </option>
-            ))}
-          </select>
+                <p className="text-sm font-medium text-white">
+                  🌐 All Resources
+                </p>
 
-          {!loadingCollections && collections.length === 0 && (
-            <p className="text-xs text-slate-500 mt-2">
-              You don't have any collections yet.
-            </p>
+                <p className="text-xs text-slate-400 mt-1">
+                  Search across your entire knowledge base.
+                </p>
+              </button>
+
+              {/* Collection */}
+
+              <button
+                type="button"
+                onClick={() =>
+                  setScopeType("collection")
+                }
+                className={`w-full text-left p-3 rounded-xl border transition ${
+                  scopeType === "collection"
+                    ? "border-indigo-500 bg-indigo-500/10"
+                    : "border-slate-700 bg-slate-950 hover:border-slate-600"
+                }`}
+              >
+                <p className="text-sm font-medium text-white">
+                  📁 Specific Collection
+                </p>
+
+                <p className="text-xs text-slate-400 mt-1">
+                  Search one collection only.
+                </p>
+              </button>
+
+              {/* Collection selector */}
+
+              {scopeType === "collection" && (
+
+                <select
+                  value={collectionId}
+                  onChange={(e) =>
+                    setCollectionId(e.target.value)
+                  }
+                  disabled={loadingCollections}
+                  className="w-full rounded-xl bg-slate-950 border border-slate-700 px-4 py-3 text-sm text-white outline-none focus:ring-2 focus:ring-indigo-500"
+                >
+
+                  <option value="">
+                    {loadingCollections
+                      ? "Loading collections..."
+                      : "Select a collection"}
+                  </option>
+
+                  {collections.map((collection) => (
+                    <option
+                      key={collection._id}
+                      value={collection._id}
+                    >
+                      {collection.name ||
+                        collection.title}
+                    </option>
+                  ))}
+
+                </select>
+
+              )}
+
+              {/* None */}
+
+              <button
+                type="button"
+                onClick={() => {
+                  setScopeType("none");
+                  setCollectionId("");
+                }}
+                className={`w-full text-left p-3 rounded-xl border transition ${
+                  scopeType === "none"
+                    ? "border-indigo-500 bg-indigo-500/10"
+                    : "border-slate-700 bg-slate-950 hover:border-slate-600"
+                }`}
+              >
+
+                <p className="text-sm font-medium text-white">
+                  🚫 No Resources
+                </p>
+
+                <p className="text-xs text-slate-400 mt-1">
+                  Normal conversation without saved resources.
+                </p>
+
+              </button>
+
+            </div>
+
+          )}
+
+          {/* ================================= */}
+          {/* 2. GitHub Repository */}
+          {/* ================================= */}
+
+          <button
+            type="button"
+            onClick={() =>
+              handleSourceChange("repository")
+            }
+            className={`w-full text-left p-4 rounded-xl border transition ${
+              sourceType === "repository"
+                ? "border-indigo-500 bg-indigo-500/10"
+                : "border-slate-700 bg-slate-950 hover:border-slate-600"
+            }`}
+          >
+
+            <div className="flex items-start gap-3">
+
+              <span className="text-xl">
+                🐙
+              </span>
+
+              <div>
+                <p className="text-sm font-medium text-white">
+                  GitHub Repository
+                </p>
+
+                <p className="text-xs text-slate-400 mt-1">
+                  Chat with an indexed GitHub repository.
+                </p>
+              </div>
+
+            </div>
+
+          </button>
+
+          {/* ================================= */}
+          {/* Repository Selector */}
+          {/* ================================= */}
+
+          {sourceType === "repository" && (
+
+            <div className="pl-2">
+
+              <label className="block text-xs font-medium text-slate-400 mb-2">
+                Select repository
+              </label>
+
+              <select
+                value={repoId}
+                onChange={(e) =>
+                  setRepoId(e.target.value)
+                }
+                disabled={loadingRepos}
+                className="w-full rounded-xl bg-slate-950 border border-slate-700 px-4 py-3 text-sm text-white outline-none focus:ring-2 focus:ring-indigo-500"
+              >
+
+                <option value="">
+                  {loadingRepos
+                    ? "Loading repositories..."
+                    : "Select a repository"}
+                </option>
+
+                {repos.map((repo) => (
+                  <option
+                    key={repo._id}
+                    value={repo._id}
+                  >
+                    {repo.owner}/{repo.name}
+                  </option>
+                ))}
+
+              </select>
+
+              {!loadingRepos && repos.length === 0 && (
+                <p className="text-xs text-slate-500 mt-2">
+                  You don't have any indexed repositories yet.
+                </p>
+              )}
+
+            </div>
+
           )}
 
         </div>
-      )}
 
-      {/* No Resources */}
-      <button
-        type="button"
-        onClick={() => {
-          setScopeType("none");
-          setCollectionId("");
-        }}
-        className={`w-full text-left p-4 rounded-xl border transition ${
-          scopeType === "none"
-            ? "border-indigo-500 bg-indigo-500/10"
-            : "border-slate-700 bg-slate-950 hover:border-slate-600"
-        }`}
-      >
-        <div className="flex items-start gap-3">
+        {/* ================================= */}
+        {/* Footer */}
+        {/* ================================= */}
 
-          <span className="text-xl">
-            🚫
-          </span>
+        <div className="flex items-center justify-end gap-3 px-6 py-5 border-t border-slate-800">
 
-          <div>
-            <p className="text-sm font-medium text-white">
-              No Resources
-            </p>
+          <button
+            onClick={onClose}
+            disabled={creating}
+            className="px-4 py-2 rounded-lg text-sm text-slate-400 hover:text-white hover:bg-slate-800 transition"
+          >
+            Cancel
+          </button>
 
-            <p className="text-xs text-slate-400 mt-1">
-              Have a normal conversation without your saved resources.
-            </p>
-          </div>
+          <button
+            onClick={handleCreateConversation}
+            disabled={
+              creating ||
+              (
+                sourceType === "resources" &&
+                scopeType === "collection" &&
+                !collectionId
+              ) ||
+              (
+                sourceType === "repository" &&
+                !repoId
+              )
+            }
+            className="px-5 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed text-sm font-medium transition"
+          >
+            {creating
+              ? "Creating..."
+              : sourceType === "repository"
+                ? "Start Chat"
+                : "Create Chat"}
+          </button>
 
         </div>
-      </button>
+
+      </div>
 
     </div>
-
-    {/* Footer */}
-    <div className="flex items-center justify-end gap-3 px-6 py-5 border-t border-slate-800">
-
-      <button
-        onClick={onClose}
-        disabled={creating}
-        className="px-4 py-2 rounded-lg text-sm text-slate-400 hover:text-white hover:bg-slate-800 transition"
-      >
-        Cancel
-      </button>
-
-      <button
-        onClick={handleCreateConversation}
-        disabled={
-          creating ||
-          (scopeType === "collection" && !collectionId)
-        }
-        className="px-5 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed text-sm font-medium transition"
-      >
-        {creating ? "Creating..." : "Create Chat"}
-      </button>
-
-    </div>
-
-  </div>
-
-</div>
-
-
-);
+  );
 }
